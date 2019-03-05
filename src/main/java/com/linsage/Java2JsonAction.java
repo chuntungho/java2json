@@ -13,11 +13,12 @@ import org.jetbrains.annotations.NonNls;
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
-import java.util.ArrayList;
-import java.util.Map;
+import java.util.List;
+import java.util.*;
 
 import static com.intellij.psi.util.PsiTypesUtil.getDefaultValueOfType;
 import static com.intellij.psi.util.PsiUtil.*;
+import static java.util.Objects.isNull;
 
 public class Java2JsonAction extends AnAction {
 
@@ -53,8 +54,8 @@ public class Java2JsonAction extends AnAction {
 
         PsiElement referenceAt = psiFile.findElementAt(editor.getCaretModel().getOffset());
         PsiClass selectedClass = (PsiClass) PsiTreeUtil.getContextOfType(referenceAt, new Class[]{PsiClass.class});
-        try {
 
+        try {
             LinkedKeyValueMemory linkedKeyValueMemory = getFields(selectedClass);
 
             StringSelection selection = new StringSelection(linkedKeyValueMemory.toPrettyJson());
@@ -74,8 +75,7 @@ public class Java2JsonAction extends AnAction {
     public LinkedKeyValueMemory getFields(PsiClass psiClass) {
         LinkedKeyValueMemory memory = new LinkedKeyValueMemory();
 
-        if (psiClass == null) {
-            System.err.println("psi class is null");
+        if (isNull(psiClass)) {
             return memory;
         }
 
@@ -86,14 +86,13 @@ public class Java2JsonAction extends AnAction {
 
             if (type instanceof PsiPrimitiveType) {
                 memory.set(name, getDefaultValueOfType(type));
-
                 continue;
             }
 
             String fieldTypeName = type.getPresentableText();
+
             if (normalTypes.containsKey(fieldTypeName)) {
                 memory.set(name, normalTypes.get(fieldTypeName));
-
                 continue;
             }
 
@@ -109,11 +108,12 @@ public class Java2JsonAction extends AnAction {
                     list.add(this.getFields(resolveClassInType(deepType)));
                 }
                 memory.set(name, list);
-
                 continue;
             }
 
-            if (fieldTypeName.startsWith("List")) {
+            List<PsiType> types = Arrays.asList(type.getSuperTypes());
+            if (Optional.of(types).orElse(Collections.emptyList())
+                    .stream().anyMatch(e -> e.getPresentableText().startsWith("Collection"))) {
                 PsiType iterableType = extractIterableTypeParameter(type, false);
                 PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
                 ArrayList list = new ArrayList<>();
@@ -121,10 +121,9 @@ public class Java2JsonAction extends AnAction {
                 if (normalTypes.containsKey(classTypeName)) {
                     list.add(normalTypes.get(classTypeName));
                 } else {
-                    list.add(getFields(iterableClass));
+                    list.add(this.getFields(iterableClass));
                 }
                 memory.set(name, list);
-
                 continue;
             }
 
@@ -132,4 +131,6 @@ public class Java2JsonAction extends AnAction {
 
         return memory;
     }
+
+
 }
