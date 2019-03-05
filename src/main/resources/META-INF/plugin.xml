@@ -2,7 +2,7 @@
     <id>com.linsage</id>
     <name>Java Bean to Json</name>
     <version>1.0.2</version>
-    <vendor email="linsage@live.com" url="https://github.com/linsage"> linsage</vendor>
+    <vendor email="linsage@live.com" url="https://github.com/linsage">linsage</vendor>
     <depends>com.intellij.modules.lang</depends>
     <description><![CDATA[
        <p>A simple plugin for converting Java bean to JSON</p>

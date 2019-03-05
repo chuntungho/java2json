@@ -3,17 +3,15 @@ package com.linsage;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Map简化操作类
- *
  * @author linsage
  * @create 2017-06-14  上午11:06
  */
 public class KV<K, V> extends LinkedHashMap<K, V> {
+
     public <K, V> KV() {
     }
 
@@ -69,32 +67,19 @@ public class KV<K, V> extends LinkedHashMap<K, V> {
         return (Float) get(key);
     }
 
-
-    /**
-     * key 存在，并且 value 不为 null
-     */
     public boolean notNull(Object key) {
         return get(key) != null;
     }
 
-    /**
-     * key 不存在，或者 key 存在但 value 为null
-     */
     public boolean isNull(Object key) {
         return get(key) == null;
     }
 
-    /**
-     * key 存在，并且 value 为 true，则返回 true
-     */
     public boolean isTrue(Object key) {
         Object value = get(key);
         return (value instanceof Boolean && ((Boolean) value == true));
     }
 
-    /**
-     * key 存在，并且 value 为 false，则返回 true
-     */
     public boolean isFalse(Object key) {
         Object value = get(key);
         return (value instanceof Boolean && ((Boolean) value == false));

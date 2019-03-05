@@ -8,8 +8,6 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
-import com.intellij.psi.util.PsiTypesUtil;
-import com.intellij.psi.util.PsiUtil;
 import org.jetbrains.annotations.NonNls;
 
 import java.awt.*;
@@ -19,7 +17,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.intellij.psi.util.PsiTypesUtil.getDefaultValueOfType;
+import static com.intellij.psi.util.PsiUtil.*;
+
 public class Java2JsonAction extends AnAction {
+
     private static NotificationGroup notificationGroup;
 
     @NonNls
@@ -44,7 +46,6 @@ public class Java2JsonAction extends AnAction {
         return normalTypes.containsKey(typeName);
     }
 
-
     @Override
     public void actionPerformed(AnActionEvent e) {
         Editor editor = (Editor) e.getDataContext().getData(CommonDataKeys.EDITOR);
@@ -67,7 +68,6 @@ public class Java2JsonAction extends AnAction {
         }
     }
 
-
     public static KV getFields(PsiClass psiClass) {
         KV kv = KV.create();
         KV commentKV = KV.create();
@@ -77,32 +77,31 @@ public class Java2JsonAction extends AnAction {
                 PsiType type = field.getType();
                 String name = field.getName();
 
-                //doc comment
                 if (field.getDocComment() != null && field.getDocComment().getText() != null) {
                     commentKV.set(name, field.getDocComment().getText());
                 }
 
-                if (type instanceof PsiPrimitiveType) {       //primitive Type
-                    kv.set(name, PsiTypesUtil.getDefaultValue(type));
-                } else {    //reference Type
+                if (type instanceof PsiPrimitiveType) {
+                    kv.set(name, getDefaultValueOfType(type));
+                } else {
                     String fieldTypeName = type.getPresentableText();
-                    if (isNormalType(fieldTypeName)) {    //normal Type
+                    if (isNormalType(fieldTypeName)) {
                         kv.set(name, normalTypes.get(fieldTypeName));
-                    } else if (type instanceof PsiArrayType) {   //array type
+                    } else if (type instanceof PsiArrayType) {
                         PsiType deepType = type.getDeepComponentType();
                         ArrayList list = new ArrayList<>();
                         String deepTypeName = deepType.getPresentableText();
                         if (deepType instanceof PsiPrimitiveType) {
-                            list.add(PsiTypesUtil.getDefaultValue(deepType));
+                            list.add(getDefaultValueOfType(deepType));
                         } else if (isNormalType(deepTypeName)) {
                             list.add(normalTypes.get(deepTypeName));
                         } else {
-                            list.add(getFields(PsiUtil.resolveClassInType(deepType)));
+                            list.add(getFields(resolveClassInType(deepType)));
                         }
                         kv.set(name, list);
-                    } else if (fieldTypeName.startsWith("List")) {   //list type
-                        PsiType iterableType = PsiUtil.extractIterableTypeParameter(type, false);
-                        PsiClass iterableClass = PsiUtil.resolveClassInClassTypeOnly(iterableType);
+                    } else if (fieldTypeName.startsWith("List")) {
+                        PsiType iterableType = extractIterableTypeParameter(type, false);
+                        PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
                         ArrayList list = new ArrayList<>();
                         String classTypeName = iterableClass.getName();
                         if (isNormalType(classTypeName)) {
@@ -111,9 +110,9 @@ public class Java2JsonAction extends AnAction {
                             list.add(getFields(iterableClass));
                         }
                         kv.set(name, list);
-                    } else {    //class type
+                    } else {
                         System.out.println(name + ":" + type);
-                        kv.set(name, getFields(PsiUtil.resolveClassInType(type)));
+                        kv.set(name, getFields(resolveClassInType(type)));
                     }
                 }
             }

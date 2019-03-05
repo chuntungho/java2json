@@ -17,7 +17,3 @@ https://plugins.jetbrains.com/plugin/10336-java-bean-to-json
     - update plugin info
 - v1.0.2
     - add doc comment
-
-## Support
-
-![](https://note-1256162930.picgz.myqcloud.com/zo1mm.jpg)
