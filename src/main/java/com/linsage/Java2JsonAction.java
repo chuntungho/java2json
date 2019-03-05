@@ -18,7 +18,6 @@ import java.util.Map;
 
 import static com.intellij.psi.util.PsiTypesUtil.getDefaultValueOfType;
 import static com.intellij.psi.util.PsiUtil.*;
-import static java.util.Objects.nonNull;
 
 public class Java2JsonAction extends AnAction {
 
@@ -42,10 +41,6 @@ public class Java2JsonAction extends AnAction {
             "Date", ""
     );
 
-    private boolean isNormalType(String typeName) {
-        return normalTypes.containsKey(typeName);
-    }
-
     @Override
     public void actionPerformed(AnActionEvent e) {
         Editor editor = e.getDataContext().getData(CommonDataKeys.EDITOR);
@@ -59,13 +54,16 @@ public class Java2JsonAction extends AnAction {
         PsiElement referenceAt = psiFile.findElementAt(editor.getCaretModel().getOffset());
         PsiClass selectedClass = (PsiClass) PsiTreeUtil.getContextOfType(referenceAt, new Class[]{PsiClass.class});
         try {
-            KV kv = getFields(selectedClass);
-            String json = kv.toPrettyJson();
-            StringSelection selection = new StringSelection(json);
+
+            LinkedKeyValueMemory linkedKeyValueMemory = getFields(selectedClass);
+
+            StringSelection selection = new StringSelection(linkedKeyValueMemory.toPrettyJson());
+
             Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
             clipboard.setContents(selection, selection);
-            String message = "Convert " + selectedClass.getName() + " to JSON success, copied to clipboard.";
-            Notification success = notificationGroup.createNotification(message, NotificationType.INFORMATION);
+
+            Notification success = notificationGroup.createNotification(
+                    "Convert " + selectedClass.getName() + " to JSON success, copied to clipboard.", NotificationType.INFORMATION);
             Notifications.Bus.notify(success, project);
         } catch (Exception ex) {
             Notification error = notificationGroup.createNotification("Convert to JSON failed.", NotificationType.ERROR);
@@ -73,63 +71,65 @@ public class Java2JsonAction extends AnAction {
         }
     }
 
-    public KV getFields(PsiClass psiClass) {
+    public LinkedKeyValueMemory getFields(PsiClass psiClass) {
+        LinkedKeyValueMemory memory = new LinkedKeyValueMemory();
+
         if (psiClass == null) {
             System.err.println("psi class is null");
-            return KV.create();
+            return memory;
         }
 
-        KV kv = KV.create();
-        KV commentKV = KV.create();
-
         for (PsiField field : psiClass.getAllFields()) {
+
             PsiType type = field.getType();
             String name = field.getName();
 
-            if (nonNull(field.getDocComment()) && nonNull(field.getDocComment().getText())) {
-                commentKV.set(name, field.getDocComment().getText());
-            }
-
             if (type instanceof PsiPrimitiveType) {
-                kv.set(name, getDefaultValueOfType(type));
-            } else {
-                String fieldTypeName = type.getPresentableText();
-                if (isNormalType(fieldTypeName)) {
-                    kv.set(name, normalTypes.get(fieldTypeName));
-                } else if (type instanceof PsiArrayType) {
-                    PsiType deepType = type.getDeepComponentType();
-                    ArrayList list = new ArrayList<>();
-                    String deepTypeName = deepType.getPresentableText();
-                    if (deepType instanceof PsiPrimitiveType) {
-                        list.add(getDefaultValueOfType(deepType));
-                    } else if (isNormalType(deepTypeName)) {
-                        list.add(normalTypes.get(deepTypeName));
-                    } else {
-                        list.add(getFields(resolveClassInType(deepType)));
-                    }
-                    kv.set(name, list);
-                } else if (fieldTypeName.startsWith("List")) {
-                    PsiType iterableType = extractIterableTypeParameter(type, false);
-                    PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
-                    ArrayList list = new ArrayList<>();
-                    String classTypeName = iterableClass.getName();
-                    if (isNormalType(classTypeName)) {
-                        list.add(normalTypes.get(classTypeName));
-                    } else {
-                        list.add(getFields(iterableClass));
-                    }
-                    kv.set(name, list);
-                } else {
-                    System.out.println(name + ":" + type);
-                    kv.set(name, getFields(resolveClassInType(type)));
-                }
+                memory.set(name, getDefaultValueOfType(type));
+
+                continue;
             }
+
+            String fieldTypeName = type.getPresentableText();
+            if (normalTypes.containsKey(fieldTypeName)) {
+                memory.set(name, normalTypes.get(fieldTypeName));
+
+                continue;
+            }
+
+            if (type instanceof PsiArrayType) {
+                PsiType deepType = type.getDeepComponentType();
+                java.util.List<Object> list = new ArrayList<>();
+                String deepTypeName = deepType.getPresentableText();
+                if (deepType instanceof PsiPrimitiveType) {
+                    list.add(getDefaultValueOfType(deepType));
+                } else if (normalTypes.containsKey(deepTypeName)) {
+                    list.add(normalTypes.get(deepTypeName));
+                } else {
+                    list.add(this.getFields(resolveClassInType(deepType)));
+                }
+                memory.set(name, list);
+
+                continue;
+            }
+
+            if (fieldTypeName.startsWith("List")) {
+                PsiType iterableType = extractIterableTypeParameter(type, false);
+                PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
+                ArrayList list = new ArrayList<>();
+                String classTypeName = iterableClass.getName();
+                if (normalTypes.containsKey(classTypeName)) {
+                    list.add(normalTypes.get(classTypeName));
+                } else {
+                    list.add(getFields(iterableClass));
+                }
+                memory.set(name, list);
+
+                continue;
+            }
+
         }
 
-        if (commentKV.size() > 0) {
-            kv.set("@comment", commentKV);
-        }
-
-        return kv;
+        return memory;
     }
 }
