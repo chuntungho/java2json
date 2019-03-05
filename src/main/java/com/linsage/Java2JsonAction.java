@@ -14,43 +14,48 @@ import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.intellij.psi.util.PsiTypesUtil.getDefaultValueOfType;
 import static com.intellij.psi.util.PsiUtil.*;
+import static java.util.Objects.nonNull;
 
 public class Java2JsonAction extends AnAction {
 
-    private static NotificationGroup notificationGroup;
+    private final NotificationGroup notificationGroup;
 
-    @NonNls
-    private static final Map<String, Object> normalTypes = new HashMap<>();
-
-    static {
+    public Java2JsonAction() {
         notificationGroup = new NotificationGroup("Java2Json.NotificationGroup", NotificationDisplayType.BALLOON, true);
-
-        normalTypes.put("Boolean", false);
-        normalTypes.put("Byte", 0);
-        normalTypes.put("Short", Short.valueOf((short) 0));
-        normalTypes.put("Integer", 0);
-        normalTypes.put("Long", 0L);
-        normalTypes.put("Float", 0.0F);
-        normalTypes.put("Double", 0.0D);
-        normalTypes.put("String", "");
-        normalTypes.put("BigDecimal", 0.0);
-        normalTypes.put("Date", "");
     }
 
-    private static boolean isNormalType(String typeName) {
+    @NonNls
+    private final Map<String, Object> normalTypes = Map.of(
+            "Boolean", false,
+            "Byte", 0,
+            "Short", (short) 0,
+            "Integer", 0,
+            "Long", 0L,
+            "Float", 0.0F,
+            "Double", 0.0D,
+            "String", "",
+            "BigDecimal", 0.0,
+            "Date", ""
+    );
+
+    private boolean isNormalType(String typeName) {
         return normalTypes.containsKey(typeName);
     }
 
     @Override
     public void actionPerformed(AnActionEvent e) {
-        Editor editor = (Editor) e.getDataContext().getData(CommonDataKeys.EDITOR);
-        PsiFile psiFile = (PsiFile) e.getDataContext().getData(CommonDataKeys.PSI_FILE);
+        Editor editor = e.getDataContext().getData(CommonDataKeys.EDITOR);
+        if (editor == null) {
+            throw new RuntimeException("not found editor");
+        }
+
+        PsiFile psiFile = e.getDataContext().getData(CommonDataKeys.PSI_FILE);
         Project project = editor.getProject();
+
         PsiElement referenceAt = psiFile.findElementAt(editor.getCaretModel().getOffset());
         PsiClass selectedClass = (PsiClass) PsiTreeUtil.getContextOfType(referenceAt, new Class[]{PsiClass.class});
         try {
@@ -68,58 +73,61 @@ public class Java2JsonAction extends AnAction {
         }
     }
 
-    public static KV getFields(PsiClass psiClass) {
+    public KV getFields(PsiClass psiClass) {
+        if (psiClass == null) {
+            System.err.println("psi class is null");
+            return KV.create();
+        }
+
         KV kv = KV.create();
         KV commentKV = KV.create();
 
-        if (psiClass != null) {
-            for (PsiField field : psiClass.getAllFields()) {
-                PsiType type = field.getType();
-                String name = field.getName();
+        for (PsiField field : psiClass.getAllFields()) {
+            PsiType type = field.getType();
+            String name = field.getName();
 
-                if (field.getDocComment() != null && field.getDocComment().getText() != null) {
-                    commentKV.set(name, field.getDocComment().getText());
-                }
+            if (nonNull(field.getDocComment()) && nonNull(field.getDocComment().getText())) {
+                commentKV.set(name, field.getDocComment().getText());
+            }
 
-                if (type instanceof PsiPrimitiveType) {
-                    kv.set(name, getDefaultValueOfType(type));
-                } else {
-                    String fieldTypeName = type.getPresentableText();
-                    if (isNormalType(fieldTypeName)) {
-                        kv.set(name, normalTypes.get(fieldTypeName));
-                    } else if (type instanceof PsiArrayType) {
-                        PsiType deepType = type.getDeepComponentType();
-                        ArrayList list = new ArrayList<>();
-                        String deepTypeName = deepType.getPresentableText();
-                        if (deepType instanceof PsiPrimitiveType) {
-                            list.add(getDefaultValueOfType(deepType));
-                        } else if (isNormalType(deepTypeName)) {
-                            list.add(normalTypes.get(deepTypeName));
-                        } else {
-                            list.add(getFields(resolveClassInType(deepType)));
-                        }
-                        kv.set(name, list);
-                    } else if (fieldTypeName.startsWith("List")) {
-                        PsiType iterableType = extractIterableTypeParameter(type, false);
-                        PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
-                        ArrayList list = new ArrayList<>();
-                        String classTypeName = iterableClass.getName();
-                        if (isNormalType(classTypeName)) {
-                            list.add(normalTypes.get(classTypeName));
-                        } else {
-                            list.add(getFields(iterableClass));
-                        }
-                        kv.set(name, list);
+            if (type instanceof PsiPrimitiveType) {
+                kv.set(name, getDefaultValueOfType(type));
+            } else {
+                String fieldTypeName = type.getPresentableText();
+                if (isNormalType(fieldTypeName)) {
+                    kv.set(name, normalTypes.get(fieldTypeName));
+                } else if (type instanceof PsiArrayType) {
+                    PsiType deepType = type.getDeepComponentType();
+                    ArrayList list = new ArrayList<>();
+                    String deepTypeName = deepType.getPresentableText();
+                    if (deepType instanceof PsiPrimitiveType) {
+                        list.add(getDefaultValueOfType(deepType));
+                    } else if (isNormalType(deepTypeName)) {
+                        list.add(normalTypes.get(deepTypeName));
                     } else {
-                        System.out.println(name + ":" + type);
-                        kv.set(name, getFields(resolveClassInType(type)));
+                        list.add(getFields(resolveClassInType(deepType)));
                     }
+                    kv.set(name, list);
+                } else if (fieldTypeName.startsWith("List")) {
+                    PsiType iterableType = extractIterableTypeParameter(type, false);
+                    PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
+                    ArrayList list = new ArrayList<>();
+                    String classTypeName = iterableClass.getName();
+                    if (isNormalType(classTypeName)) {
+                        list.add(normalTypes.get(classTypeName));
+                    } else {
+                        list.add(getFields(iterableClass));
+                    }
+                    kv.set(name, list);
+                } else {
+                    System.out.println(name + ":" + type);
+                    kv.set(name, getFields(resolveClassInType(type)));
                 }
             }
+        }
 
-            if (commentKV.size() > 0) {
-                kv.set("@comment", commentKV);
-            }
+        if (commentKV.size() > 0) {
+            kv.set("@comment", commentKV);
         }
 
         return kv;
