@@ -1,8 +1,8 @@
 <idea-plugin>
-    <id>com.linsage</id>
+    <id>com.chuntung</id>
     <name>Java Bean to Json</name>
-    <version>1.0.2</version>
-    <vendor email="linsage@live.com" url="https://github.com/linsage">linsage</vendor>
+    <version>1.0.3</version>
+    <vendor email="ho@chuntung.com" url="https://github.com/chuntungho">Tony Ho</vendor>
     <depends>com.intellij.modules.lang</depends>
     <description><![CDATA[
        <p>A simple plugin for converting Java bean to JSON</p>
@@ -13,12 +13,13 @@
          <li>1.0 - First revision.</li>
          <li>1.0.1 - update plugin info.</li>
          <li>1.0.2 - add doc comment.</li>
+         <li>1.0.3 - exelude static field, populate current date for @JsonFormat annotation.</li>
     ]]>
     </change-notes>
 
     <depends>com.intellij.modules.lang</depends>
     <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
-    <idea-version since-build="173.0"/>
+    <idea-version since-build="173.30"/>
 
     <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
          on how to target different products -->
@@ -31,8 +32,8 @@
     </extensions>
 
     <actions>
-        <action id="com.linsage.Java2JsonAction" class="com.linsage.Java2JsonAction" text="ConvertToJson"
-                description="Java Bean Convert to Json">
+        <action id="com.linsage.Java2JsonAction" class="com.linsage.Java2JsonAction" text="Copy as Json"
+                description="Copy Java Bean in Json format">
             <add-to-group group-id="EditorPopupMenu" anchor="first"/>
         </action>
     </actions>

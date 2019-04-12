@@ -1,5 +1,7 @@
 package com.linsage;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.intellij.lang.jvm.JvmModifier;
 import com.intellij.notification.*;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -8,6 +10,7 @@ import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.*;
 import com.intellij.psi.util.PsiTreeUtil;
+import org.apache.http.client.utils.DateUtils;
 import org.jetbrains.annotations.NonNls;
 
 import java.awt.*;
@@ -26,21 +29,21 @@ public class Java2JsonAction extends AnAction {
 
     public Java2JsonAction() {
         notificationGroup = new NotificationGroup("Java2Json.NotificationGroup", NotificationDisplayType.BALLOON, true);
+
+        normalTypes.put("String", "");
+        normalTypes.put("Boolean", false);
+        normalTypes.put("Byte", 0);
+        normalTypes.put("Short", (short) 0);
+        normalTypes.put("Integer", 0);
+        normalTypes.put("Long", 0L);
+        normalTypes.put("Float", 0.0F);
+        normalTypes.put("Double", 0.0D);
+        normalTypes.put("BigDecimal", 0.0);
+//        normalTypes.put("Date", new Date());
     }
 
     @NonNls
-    private final Map<String, Object> normalTypes = Map.of(
-            "Boolean", false,
-            "Byte", 0,
-            "Short", (short) 0,
-            "Integer", 0,
-            "Long", 0L,
-            "Float", 0.0F,
-            "Double", 0.0D,
-            "String", "",
-            "BigDecimal", 0.0,
-            "Date", ""
-    );
+    private final Map<String, Object> normalTypes = new HashMap<>();
 
     @Override
     public void actionPerformed(AnActionEvent e) {
@@ -64,7 +67,7 @@ public class Java2JsonAction extends AnAction {
             clipboard.setContents(selection, selection);
 
             Notification success = notificationGroup.createNotification(
-                    "Convert " + selectedClass.getName() + " to JSON success, copied to clipboard.", NotificationType.INFORMATION);
+                    selectedClass.getName() + " copied to clipboard in JSON.", NotificationType.INFORMATION);
             Notifications.Bus.notify(success, project);
         } catch (Exception ex) {
             Notification error = notificationGroup.createNotification("Convert to JSON failed.", NotificationType.ERROR);
@@ -80,6 +83,10 @@ public class Java2JsonAction extends AnAction {
         }
 
         for (PsiField field : psiClass.getAllFields()) {
+            //  exclude static field
+            if (field.hasModifier(JvmModifier.STATIC)) {
+                continue;
+            }
 
             PsiType type = field.getType();
             String name = field.getName();
@@ -90,13 +97,22 @@ public class Java2JsonAction extends AnAction {
             }
 
             String fieldTypeName = type.getPresentableText();
-
-            if (normalTypes.containsKey(fieldTypeName)) {
+            if ("Date".equals(fieldTypeName)) {
+                memory.set(name, "");
+                PsiAnnotation anno = field.getAnnotation(JsonFormat.class.getName());
+                if (anno != null) {
+                    PsiAnnotationMemberValue val = anno.findDeclaredAttributeValue("pattern");
+                    if (val != null && !"".equals(val.getText())) {
+                        // format current date
+                        String pattern = val.getText().substring(1, val.getText().length() - 1);
+                        memory.set(name, DateUtils.formatDate(new Date(), pattern));
+                    }
+                }
+            } else if ("String".equals(fieldTypeName)) {
+                memory.set(name, name);
+            } else if (normalTypes.containsKey(fieldTypeName)) {
                 memory.set(name, normalTypes.get(fieldTypeName));
-                continue;
-            }
-
-            if (type instanceof PsiArrayType) {
+            } else if (type instanceof PsiArrayType) {
                 PsiType deepType = type.getDeepComponentType();
                 java.util.List<Object> list = new ArrayList<>();
                 String deepTypeName = deepType.getPresentableText();
@@ -108,23 +124,21 @@ public class Java2JsonAction extends AnAction {
                     list.add(this.getFields(resolveClassInType(deepType)));
                 }
                 memory.set(name, list);
-                continue;
-            }
-
-            List<PsiType> types = Arrays.asList(type.getSuperTypes());
-            if (Optional.of(types).orElse(Collections.emptyList())
-                    .stream().anyMatch(e -> e.getPresentableText().startsWith("Collection"))) {
-                PsiType iterableType = extractIterableTypeParameter(type, false);
-                PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
-                ArrayList list = new ArrayList<>();
-                String classTypeName = iterableClass.getName();
-                if (normalTypes.containsKey(classTypeName)) {
-                    list.add(normalTypes.get(classTypeName));
-                } else {
-                    list.add(this.getFields(iterableClass));
+            } else {
+                List<PsiType> types = Arrays.asList(type.getSuperTypes());
+                if (Optional.of(types).orElse(Collections.emptyList())
+                        .stream().anyMatch(e -> e.getPresentableText().startsWith("Collection"))) {
+                    PsiType iterableType = extractIterableTypeParameter(type, false);
+                    PsiClass iterableClass = resolveClassInClassTypeOnly(iterableType);
+                    ArrayList list = new ArrayList<>();
+                    String classTypeName = iterableClass.getName();
+                    if (normalTypes.containsKey(classTypeName)) {
+                        list.add(normalTypes.get(classTypeName));
+                    } else {
+                        list.add(this.getFields(iterableClass));
+                    }
+                    memory.set(name, list);
                 }
-                memory.set(name, list);
-                continue;
             }
 
         }
