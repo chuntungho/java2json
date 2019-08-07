@@ -138,6 +138,8 @@ public class Java2JsonAction extends AnAction {
                         list.add(this.getFields(iterableClass));
                     }
                     memory.set(name, list);
+                } else {
+                    memory.set(name, "");
                 }
             }
 
